@@ -7,6 +7,7 @@ import CategoryCarousel from "../components/CategoryCarousel";
 import About from "../components/About";
 import Footer from "../components/Footer";
 import { fetchCategories } from "../data/categories";
+import { Link } from "react-router-dom"; // ✅ Make sure you're using react-router
 
 export default function LandingPage() {
   const [categories, setCategories] = useState([]);
@@ -37,7 +38,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div dir="rtl" className="bg-[#fad9d2] font-sans">
+    <div dir="rtl" className="bg-[#fad9d2] font-sans relative min-h-screen">
       <Header />
       <Navbar />
       <Video />
@@ -55,6 +56,14 @@ export default function LandingPage() {
 
       <About />
       <Footer />
+
+      {/* ✅ Floating Admin Link */}
+      <Link
+        to="/admin"
+        className="fixed bottom-6 right-6 bg-[#A47B2D] text-white px-4 py-2 rounded-full shadow-lg hover:bg-[#8b6926] transition"
+      >
+        ניהול
+      </Link>
     </div>
   );
 }
