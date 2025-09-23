@@ -1,0 +1,12 @@
+@import 'tailwindcss';
+
+@font-face {
+  font-family: "MyCustomFont"; /* Pick a name */
+  src: url("/fonts/KtavYadCLM-BoldItalic.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+}
+
+html {
+  scroll-behavior: smooth;
+}
