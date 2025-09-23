@@ -1,8 +1,54 @@
 import React, { useEffect, useState, useRef } from "react";
-import { db, auth } from "../firebase"; // ✅ make sure auth is exported from firebase.js
+import { db, auth } from "../firebase"; // ✅ make sure firebase.js exports db + auth
 import { signOut } from "firebase/auth";
 import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
-import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  horizontalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// ✅ Sortable image component
+function SortableImage({ img, index, onDelete }) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: index });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <div className="relative w-28 h-28 sm:w-32 sm:h-32">
+        <img
+          src={img.url}
+          alt=""
+          className="w-full h-full object-cover rounded shadow"
+        />
+        <button
+          onClick={(e) => {
+            e.stopPropagation(); // ✅ Prevent drag interference
+            e.preventDefault();
+            onDelete(index);
+          }}
+          className="absolute top-1 right-1 bg-black bg-opacity-70 hover:bg-opacity-90 text-white rounded-full px-1.5 py-0.5 text-xs"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const [categories, setCategories] = useState([]);
@@ -12,7 +58,7 @@ export default function AdminPage() {
 
   const fileInputRef = useRef(null);
 
-  // Fetch categories
+  // ✅ Fetch categories from Firestore
   useEffect(() => {
     async function loadCategories() {
       const snap = await getDocs(collection(db, "categories"));
@@ -22,14 +68,16 @@ export default function AdminPage() {
     loadCategories();
   }, []);
 
-  // Handle drag & drop reorder
-  const handleDragEnd = async (result, catId) => {
-    if (!result.destination) return;
-    const category = categories.find((c) => c.id === catId);
-    const reordered = Array.from(category.images);
+  // ✅ dnd-kit sensors
+  const sensors = useSensors(useSensor(PointerSensor));
 
-    const [moved] = reordered.splice(result.source.index, 1);
-    reordered.splice(result.destination.index, 0, moved);
+  // ✅ Drag and Drop reorder
+  const handleDragEnd = async (event, catId) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const category = categories.find((c) => c.id === catId);
+    const reordered = arrayMove(category.images, active.id, over.id);
 
     const updatedImages = reordered.map((img, i) => ({
       ...img,
@@ -43,7 +91,7 @@ export default function AdminPage() {
     );
   };
 
-  // Handle delete
+  // ✅ Delete image
   const handleDelete = async (catId, index) => {
     const category = categories.find((c) => c.id === catId);
     const updatedImages = category.images.filter((_, i) => i !== index);
@@ -55,7 +103,7 @@ export default function AdminPage() {
     );
   };
 
-  // Handle upload
+  // ✅ Upload new image (Cloudinary)
   const handleUploadImage = async (catId, file) => {
     if (!file) return;
     setUploading(true);
@@ -79,13 +127,9 @@ export default function AdminPage() {
       );
 
       const data = await res.json();
-
-      if (!data.secure_url) {
-        throw new Error("Cloudinary upload failed");
-      }
+      if (!data.secure_url) throw new Error("Cloudinary upload failed");
 
       const url = data.secure_url;
-
       const category = categories.find((c) => c.id === catId);
       const updatedImages = [
         ...category.images,
@@ -106,15 +150,15 @@ export default function AdminPage() {
     }
   };
 
-  // Handle logout
+  // ✅ Logout
   const handleLogout = async () => {
     await signOut(auth);
-    window.location.href = "/login"; // redirect to login page
+    window.location.href = "/login";
   };
 
   return (
     <div className="p-6 space-y-6">
-      {/* ✅ Top-left toolbar */}
+      {/* ✅ Top bar */}
       <div className="flex justify-between items-center mb-6">
         <div className="flex gap-4">
           <button
@@ -138,6 +182,7 @@ export default function AdminPage() {
         </h1>
       </div>
 
+      {/* ✅ Categories */}
       {categories.map((cat) => (
         <div key={cat.id} className="border rounded-lg bg-white shadow">
           {/* Header */}
@@ -156,53 +201,31 @@ export default function AdminPage() {
           {/* Expandable content */}
           {openCategory === cat.id && (
             <div className="p-4 space-y-4">
-              <DragDropContext
-                onDragEnd={(result) => handleDragEnd(result, cat.id)}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(e) => handleDragEnd(e, cat.id)}
               >
-                <Droppable droppableId={cat.id} direction="horizontal">
-                  {(provided) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className="flex gap-4 overflow-x-auto"
-                    >
-                      {cat.images
-                        .sort((a, b) => a.order - b.order)
-                        .map((img, idx) => (
-                          <Draggable
-                            key={idx.toString()}
-                            draggableId={`${cat.id}-${idx}`}
-                            index={idx}
-                          >
-                            {(provided) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className="relative"
-                              >
-                                <img
-                                  src={img.url}
-                                  alt=""
-                                  className="w-32 h-32 object-cover rounded"
-                                />
-                                <button
-                                  onClick={() => handleDelete(cat.id, idx)}
-                                  className="absolute top-1 right-1 bg-black text-white rounded-full px-2 py-1 text-xs"
-                                >
-                                  ✕
-                                </button>
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                      {provided.placeholder}
-                    </div>
-                  )}
-                </Droppable>
-              </DragDropContext>
+                <SortableContext
+                  items={cat.images.map((_, i) => i)}
+                  strategy={horizontalListSortingStrategy}
+                >
+                  <div className="flex flex-wrap gap-4">
+                    {cat.images
+                      .sort((a, b) => a.order - b.order)
+                      .map((img, idx) => (
+                        <SortableImage
+                          key={idx}
+                          img={img}
+                          index={idx}
+                          onDelete={(i) => handleDelete(cat.id, i)}
+                        />
+                      ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
 
-              {/* Upload button inside dropdown */}
+              {/* Upload button */}
               <div className="flex justify-end">
                 <button
                   onClick={() => {
