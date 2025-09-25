@@ -17,14 +17,55 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+// ✅ Custom sensor that ignores elements with [data-no-dnd]
+class NoDndPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: "onPointerDown",
+      handler: ({ nativeEvent }) => {
+        return !nativeEvent.target.closest("[data-no-dnd]");
+      },
+    },
+  ];
+}
+
 // ✅ Sortable image component
 function SortableImage({ img, index, onDelete }) {
   const { attributes, listeners, setNodeRef, transform, transition } =
     useSortable({ id: index });
 
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const timerRef = useRef(null);
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+  };
+
+  const handleAskDelete = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setConfirmDelete(true);
+
+    // Auto-hide confirmation after 3s
+    clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      setConfirmDelete(false);
+    }, 3000);
+  };
+
+  const handleCancel = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    clearTimeout(timerRef.current);
+    setConfirmDelete(false);
+  };
+
+  const handleConfirm = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    clearTimeout(timerRef.current);
+    onDelete(index);
   };
 
   return (
@@ -35,16 +76,40 @@ function SortableImage({ img, index, onDelete }) {
           alt=""
           className="w-full h-full object-cover rounded shadow"
         />
-        <button
-          onClick={(e) => {
-            e.stopPropagation(); // ✅ Prevent drag interference
-            e.preventDefault();
-            onDelete(index);
-          }}
-          className="absolute top-1 right-1 bg-black bg-opacity-70 hover:bg-opacity-90 text-white rounded-full px-1.5 py-0.5 text-xs"
-        >
-          ✕
-        </button>
+
+        {/* ❌ Delete button */}
+        {!confirmDelete && (
+          <button
+            data-no-dnd
+            onClick={handleAskDelete}
+            className="absolute top-1 right-1 bg-black bg-opacity-70 hover:bg-opacity-90 text-white rounded-full px-1.5 py-0.5 text-xs"
+          >
+            ✕
+          </button>
+        )}
+
+        {/* 🔴 Confirm overlay */}
+        {confirmDelete && (
+          <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center gap-2 rounded">
+            <p className="text-white text-sm">Delete this image?</p>
+            <div className="flex gap-2">
+              <button
+                data-no-dnd
+                onClick={handleConfirm}
+                className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 text-xs rounded"
+              >
+                Yes
+              </button>
+              <button
+                data-no-dnd
+                onClick={handleCancel}
+                className="bg-gray-400 hover:bg-gray-500 text-white px-2 py-1 text-xs rounded"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -69,7 +134,11 @@ export default function AdminPage() {
   }, []);
 
   // ✅ dnd-kit sensors
-  const sensors = useSensors(useSensor(PointerSensor));
+  const sensors = useSensors(
+    useSensor(NoDndPointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
 
   // ✅ Drag and Drop reorder
   const handleDragEnd = async (event, catId) => {
